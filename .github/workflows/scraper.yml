@@ -14,13 +14,13 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
     
-    - name: Cache previous jobs data
-      uses: actions/cache@v3
+    - name: Restore previous jobs cache
+      uses: actions/cache/restore@v3
       with:
         path: previous_jobs.json
-        key: wurk-jobs-cache-${{ github.run_id }}
+        key: wurk-jobs-cache
         restore-keys: |
-          wurk-jobs-cache-
+          wurk-jobs-cache
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -42,3 +42,10 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       run: |
         python scraper.py
+    
+    - name: Save previous jobs cache
+      uses: actions/cache/save@v3
+      if: always()
+      with:
+        path: previous_jobs.json
+        key: wurk-jobs-cache
