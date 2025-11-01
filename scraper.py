@@ -1,5 +1,6 @@
 import os
 import asyncio
+import json
 from playwright.async_api import async_playwright
 import requests
 import html
@@ -41,6 +42,16 @@ async def scrape_wurk_jobs():
                     # Extract creator name
                     creator_elem = await card.query_selector(".creator-name")
                     creator_name = await creator_elem.inner_text() if creator_elem else "Unknown"
+                    
+                    # Extract time left
+                    timing_elem = await card.query_selector(".stat-timing")
+                    time_left = "N/A"
+                    if timing_elem:
+                        timing_text = await timing_elem.inner_text()
+                        # Extract just the time part (e.g., "22h 35m left")
+                        time_left = timing_text.strip()
+                    
+                    print(f"Job {idx}: Creator={creator_name}, Time Left={time_left}")
                     
                     # Extract reward amounts (both USD and SOL)
                     reward_primary = await card.query_selector(".reward-primary")
@@ -84,6 +95,7 @@ async def scrape_wurk_jobs():
                     
                     jobs_data.append({
                         "creator": creator_name.strip(),
+                        "time_left": time_left,
                         "reward": reward_text.strip(),
                         "description": description.strip()
                     })
@@ -100,7 +112,40 @@ async def scrape_wurk_jobs():
             await browser.close()
             return []
 
-def send_telegram_message(bot_token, chat_id, jobs_data):
+def get_job_signature(job):
+    """Create a unique signature for a job (excluding time_left)"""
+    return f"{job['creator']}|{job['reward']}|{job['description']}"
+
+def load_previous_jobs():
+    """Load previously seen jobs from file"""
+    try:
+        if os.path.exists('previous_jobs.json'):
+            with open('previous_jobs.json', 'r') as f:
+                data = json.load(f)
+                return set(data.get('signatures', []))
+        return set()
+    except Exception as e:
+        print(f"Error loading previous jobs: {e}")
+        return set()
+
+def save_current_jobs(jobs_data):
+    """Save current jobs to file"""
+    try:
+        signatures = [get_job_signature(job) for job in jobs_data]
+        with open('previous_jobs.json', 'w') as f:
+            json.dump({'signatures': signatures}, f)
+        print(f"Saved {len(signatures)} job signatures")
+    except Exception as e:
+        print(f"Error saving jobs: {e}")
+
+def find_new_jobs(current_jobs, previous_signatures):
+    """Find jobs that weren't in the previous run"""
+    new_jobs = []
+    for job in current_jobs:
+        signature = get_job_signature(job)
+        if signature not in previous_signatures:
+            new_jobs.append(job)
+    return new_jobs
     """Send formatted job listings to Telegram"""
     if not jobs_data:
         message = "No new jobs found at this time."
@@ -173,17 +218,29 @@ async def main():
     
     print("Starting WURK job scraper...")
     
+    # Load previous jobs
+    previous_signatures = load_previous_jobs()
+    print(f"Loaded {len(previous_signatures)} previously seen jobs")
+    
     # Scrape jobs
-    jobs_data = await scrape_wurk_jobs()
+    current_jobs = await scrape_wurk_jobs()
+    print(f"Scraped {len(current_jobs)} total jobs")
     
-    print(f"\nScraped {len(jobs_data)} jobs")
+    # Find new jobs
+    new_jobs = find_new_jobs(current_jobs, previous_signatures)
+    print(f"Found {len(new_jobs)} NEW jobs")
     
-    # Send to Telegram
-    if jobs_data:
-        send_telegram_message(bot_token, chat_id, jobs_data)
+    # Send to Telegram only if there are new jobs
+    if new_jobs:
+        print(f"\nNew jobs to send:")
+        for i, job in enumerate(new_jobs, 1):
+            print(f"  Job {i}: Creator={job['creator']}, Time Left={job['time_left']}, Reward={job['reward']}")
+        send_telegram_message(bot_token, chat_id, new_jobs)
     else:
-        # Send notification even if no jobs found
-        send_telegram_message(bot_token, chat_id, [])
+        print("No new jobs to report - skipping Telegram notification")
+    
+    # Save current jobs for next run
+    save_current_jobs(current_jobs)
 
 if __name__ == "__main__":
     asyncio.run(main())
