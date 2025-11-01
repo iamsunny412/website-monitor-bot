@@ -100,36 +100,26 @@ async def scrape_wurk_jobs():
             await browser.close()
             return []
 
-def escape_telegram_markdown(text):
-    """Escape special characters for Telegram MarkdownV2"""
-    # Characters that need to be escaped in MarkdownV2
-    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
-    
-    for char in special_chars:
-        text = text.replace(char, f'\\{char}')
-    
-    return text
-
 def send_telegram_message(bot_token, chat_id, jobs_data):
     """Send formatted job listings to Telegram"""
     if not jobs_data:
         message = "No new jobs found at this time."
     else:
-        # Build message with plain text (no markdown)
-        message_parts = [f"🆕 *WURK Custom Jobs Update* 🆕\n"]
+        # Build message with HTML formatting (cleaner and more reliable)
+        message_parts = ["🆕 <b>WURK Custom Jobs Update</b> 🆕\n"]
         message_parts.append(f"Found {len(jobs_data)} new job(s)\n")
         message_parts.append("━━━━━━━━━━━━━━━━━━━━\n")
         
         for idx, job in enumerate(jobs_data, 1):
-            # Escape special characters
-            creator = escape_telegram_markdown(job['creator'])
-            reward = escape_telegram_markdown(job['reward'])
-            description = escape_telegram_markdown(job['description'])
+            # HTML escape special characters
+            creator = html.escape(job['creator'])
+            reward = html.escape(job['reward'])
+            description = html.escape(job['description'])
             
-            message_parts.append(f"\n*Job #{idx}*\n")
-            message_parts.append(f"👤 *Creator:* {creator}\n")
-            message_parts.append(f"💰 *Reward:* {reward}\n")
-            message_parts.append(f"📝 *About:* {description}\n")
+            message_parts.append(f"\n<b>Job #{idx}</b>\n")
+            message_parts.append(f"👤 <b>Creator:</b> {creator}\n")
+            message_parts.append(f"💰 <b>Reward:</b> {reward}\n")
+            message_parts.append(f"📝 <b>About:</b> {description}\n")
             
             if idx < len(jobs_data):
                 message_parts.append("━━━━━━━━━━━━━━━━━━━━\n")
@@ -142,7 +132,7 @@ def send_telegram_message(bot_token, chat_id, jobs_data):
     payload = {
         "chat_id": chat_id,
         "text": message,
-        "parse_mode": "MarkdownV2"
+        "parse_mode": "HTML"
     }
     
     try:
@@ -154,11 +144,11 @@ def send_telegram_message(bot_token, chat_id, jobs_data):
         print(f"Error sending message to Telegram: {e}")
         print(f"Response: {response.text if 'response' in locals() else 'No response'}")
         
-        # Fallback: try sending without markdown
+        # Fallback: try sending without formatting
         try:
-            print("Retrying without markdown...")
-            # Remove markdown formatting
-            plain_message = message.replace('*', '').replace('_', '').replace('`', '')
+            print("Retrying without formatting...")
+            # Remove HTML tags
+            plain_message = message.replace('<b>', '').replace('</b>', '')
             payload = {
                 "chat_id": chat_id,
                 "text": plain_message
