@@ -14,6 +14,14 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
     
+    - name: Cache previous jobs data
+      uses: actions/cache@v3
+      with:
+        path: previous_jobs.json
+        key: wurk-jobs-cache-${{ github.run_id }}
+        restore-keys: |
+          wurk-jobs-cache-
+    
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
